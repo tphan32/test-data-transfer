@@ -1,95 +1,99 @@
-import Image from "next/image";
+"use client";
+
 import styles from "./page.module.css";
+import { encrypt, decrypt } from "@tphan32/data-transfer";
+import uploadFile from "./actions/upload";
+import downloadFile from "./actions/download";
+import React, { useState } from "react";
 
 export default function Home() {
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [pass, setPass] = useState(null);
+  const [fileName, setFileName] = useState("");
+  const [fileNameToDownload, setFileNameToDownload] = useState("");
+
+  const onFileChange = (event) => {
+    setSelectedFile(event.target.files[0]);
+  };
+
+  const handleOnClick = () => {
+    const reader = new FileReader();
+    reader.readAsArrayBuffer(selectedFile);
+    reader.onload = function () {
+      encrypt(reader.result).then(async ({ encrypted, pass }) => {
+        setPass(pass);
+        console.log("redirecting to server for uploading file");
+        const fileName = await uploadFile(encrypted, selectedFile.name);
+        // console.log("file uploaded", fileName);
+        setFileName(fileName);
+        // fetch("/api/upload", {
+        //   method: "POST",
+        //   headers: {
+        //     "Content-Type": "application/json",
+        //   },
+        //   body: JSON.stringify({ encrypted, fileName: selectedFile.name }),
+        // })
+      });
+    };
+  };
+
+  const handleEnterFileName = (event) => {
+    setFileNameToDownload(event.target.value);
+  }
+
+  const handleEnterPass = (event) => {
+    setPass(event.target.value);
+  }
+
+  const handleDownload = () => {
+    console.log("redirecting to server for downloading file");
+    const download = async () => {
+      const {data} = await downloadFile(fileNameToDownload);
+      // console.log("file downloaded", data);
+      if (data) {
+        decrypt(data, pass).then((decrypted) => {
+          const blob = new Blob([decrypted], { type: "application/octet-stream" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = fileNameToDownload;
+          a.click();
+          // console.log("decrypted ne", decrypted);
+          // console.log(new TextDecoder().decode(decrypted));
+        });
+      }
+    }
+    download();
+  }
+
   return (
     <main className={styles.main}>
-      <div className={styles.description}>
-        <p>
-          Get started by editing&nbsp;
-          <code className={styles.code}>app/page.js</code>
-        </p>
+      <section className={styles.description}>
         <div>
-          <a
-            href="https://vercel.com?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            By{" "}
-            <Image
-              src="/vercel.svg"
-              alt="Vercel Logo"
-              className={styles.vercelLogo}
-              width={100}
-              height={24}
-              priority
-            />
-          </a>
+          <label htmlFor="image">Choose a file</label>
+          <input
+            type="file"
+            id="file"
+            name="file"
+            accept="image/png, image/jpeg, .txt, .pdf"
+            onChange={onFileChange}
+          />
+          <button onClick={handleOnClick}>Upload</button>
         </div>
-      </div>
-
-      <div className={styles.center}>
-        <Image
-          className={styles.logo}
-          src="/next.svg"
-          alt="Next.js Logo"
-          width={180}
-          height={37}
-          priority
-        />
-      </div>
-
-      <div className={styles.grid}>
-        <a
-          href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className={styles.card}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2>
-            Docs <span>-&gt;</span>
-          </h2>
-          <p>Find in-depth information about Next.js features and API.</p>
-        </a>
-
-        <a
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className={styles.card}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2>
-            Learn <span>-&gt;</span>
-          </h2>
-          <p>Learn about Next.js in an interactive course with&nbsp;quizzes!</p>
-        </a>
-
-        <a
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className={styles.card}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2>
-            Templates <span>-&gt;</span>
-          </h2>
-          <p>Explore starter templates for Next.js.</p>
-        </a>
-
-        <a
-          href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className={styles.card}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2>
-            Deploy <span>-&gt;</span>
-          </h2>
-          <p>
-            Instantly deploy your Next.js site to a shareable URL with Vercel.
-          </p>
-        </a>
-      </div>
+        {fileName && (
+          <div>
+            <p>File Name: {fileName}</p>
+            <p>Pass: {pass}</p>
+          </div>
+        )}
+      </section>
+      <section className={styles.description}>
+          <label htmlFor="text">Enter a file name</label>
+          <input type="text" id="name" name="name" onChange={handleEnterFileName}/>
+          <input type="text" id="pass" name="pass" onChange={handleEnterPass}/>
+          <button onClick={handleDownload}>Download</button>
+      </section>
     </main>
   );
 }
+
