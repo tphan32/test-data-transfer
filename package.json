@@ -9,7 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@tphan32/data-transfer": "^1.0.1",
+    "@tphan32/data-transfer": "^1.0.3",
     "next": "14.1.4",
     "react": "^18",
     "react-dom": "^18"
