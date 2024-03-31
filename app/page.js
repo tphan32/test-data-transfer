@@ -17,42 +17,39 @@ export default function Home() {
   };
 
   const handleOnClick = () => {
-    const reader = new FileReader();
-    reader.readAsArrayBuffer(selectedFile);
-    reader.onload = function () {
-      encrypt(reader.result).then(async ({ encrypted, pass }) => {
-        setPass(pass);
+    const fileReader = new FileReader();
+    fileReader.readAsArrayBuffer(selectedFile);
+    fileReader.onload = (e) => {
+      const arrayBuffer = e.target.result;
+      encrypt(arrayBuffer).then(async ({ encrypted, pass }) => {
+        const formData = new FormData();
+        const blob = new File([encrypted], selectedFile.name);
+        formData.append("file", blob);
+        formData.append("fileName", selectedFile.name);
         console.log("redirecting to server for uploading file");
-        const fileName = await uploadFile(encrypted, selectedFile.name);
-        // console.log("file uploaded", fileName);
-        setFileName(fileName);
-        // fetch("/api/upload", {
-        //   method: "POST",
-        //   headers: {
-        //     "Content-Type": "application/json",
-        //   },
-        //   body: JSON.stringify({ encrypted, fileName: selectedFile.name }),
-        // })
+        const name = await uploadFile(formData);
+        setFileName(name);
+        setPass(pass);
       });
     };
   };
-
   const handleEnterFileName = (event) => {
     setFileNameToDownload(event.target.value);
-  }
+  };
 
   const handleEnterPass = (event) => {
     setPass(event.target.value);
-  }
+  };
 
   const handleDownload = () => {
     console.log("redirecting to server for downloading file");
     const download = async () => {
-      const {data} = await downloadFile(fileNameToDownload);
-      // console.log("file downloaded", data);
+      const { data } = await downloadFile(fileNameToDownload);
       if (data) {
         decrypt(data, pass).then((decrypted) => {
-          const blob = new Blob([decrypted], { type: "application/octet-stream" });
+          const blob = new Blob([decrypted], {
+            type: "application/octet-stream",
+          });
           const url = URL.createObjectURL(blob);
           const a = document.createElement("a");
           a.href = url;
@@ -62,9 +59,9 @@ export default function Home() {
           // console.log(new TextDecoder().decode(decrypted));
         });
       }
-    }
+    };
     download();
-  }
+  };
 
   return (
     <main className={styles.main}>
@@ -88,10 +85,15 @@ export default function Home() {
         )}
       </section>
       <section className={styles.description}>
-          <label htmlFor="text">Enter a file name</label>
-          <input type="text" id="name" name="name" onChange={handleEnterFileName}/>
-          <input type="text" id="pass" name="pass" onChange={handleEnterPass}/>
-          <button onClick={handleDownload}>Download</button>
+        <label htmlFor="text">Enter a file name</label>
+        <input
+          type="text"
+          id="name"
+          name="name"
+          onChange={handleEnterFileName}
+        />
+        <input type="text" id="pass" name="pass" onChange={handleEnterPass} />
+        <button onClick={handleDownload}>Download</button>
       </section>
     </main>
   );
