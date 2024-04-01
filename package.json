@@ -9,9 +9,15 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@tphan32/data-transfer": "^1.0.4",
+    "@tphan32/data-transfer": "^1.0.5",
     "next": "14.1.4",
     "react": "^18",
     "react-dom": "^18"
+  },
+  "type": "module",
+  "devDependencies": {
+    "autoprefixer": "^10.4.19",
+    "postcss": "^8.4.38",
+    "tailwindcss": "^3.4.3"
   }
 }
