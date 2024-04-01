@@ -4,7 +4,8 @@ const nextConfig = {
     serverActions: {
       bodySizeLimit: '5GB'
     }
-  }
+  },
+  reactStrictMode: false
 };
 
 export default nextConfig;
