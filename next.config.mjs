@@ -2,7 +2,7 @@
 const nextConfig = {
   experimental: {
     serverActions: {
-      bodySizeLimit: '5GB'
+      bodySizeLimit: '6GB'
     }
   },
   reactStrictMode: false

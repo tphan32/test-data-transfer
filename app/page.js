@@ -1,199 +1,110 @@
 "use client";
 
 import styles from "./page.module.css";
-import { encrypt, decrypt } from "@tphan32/data-transfer";
-import uploadFile from "./actions/upload";
-import downloadFile from "./actions/download";
 import React, { useEffect, useState, useRef } from "react";
-// import { socket } from "./socket";
-import { getProgress } from "./actions/progress";
+import {
+  generateIV,
+  generateKey,
+  generatePass,
+  encrypt,
+  decrypt,
+} from "./utils/cryptoInBrowser";
+
+const chunkSize = 4 * 1024 * 1024; // 4 MB
 
 export default function Home() {
   const [selectedFile, setSelectedFile] = useState(null);
   const [pass, setPass] = useState(null);
-  const [fileName, setFileName] = useState("");
-  const [fileNameToDownload, setFileNameToDownload] = useState("");
+  const [displayFileName, setDisplayFileName] = useState("");
   const [isUploading, setIsUploading] = useState(false);
-  const [isDownloading, setIsDownloading] = useState(false);
   const [progress, setProgress] = useState(0);
-  const timerRef = useRef(null);
+  const [error, setError] = useState(null);
 
   const onFileChange = (event) => {
     setSelectedFile(event.target.files[0]);
   };
 
   const handleOnClick = () => {
-    const fileReader = new FileReader();
-    fileReader.readAsArrayBuffer(selectedFile);
-    fileReader.onload = (e) => {
-      setIsUploading(true);
-      setProgress(0);
-      const arrayBuffer = e.target.result;
-      encrypt(arrayBuffer).then(async ({ encrypted, pass }) => {
-        const formData = new FormData();
-        const blob = new File([encrypted], selectedFile.name);
-        formData.append("file", blob);
-        formData.append("fileName", selectedFile.name);
-        console.log("redirecting to server for uploading file");
-        const name = await uploadFile(formData);
-        setFileName(name);
-        setPass(pass);
-      });
+    if (!selectedFile) {
+      return;
+    }
+    setIsUploading(true);
+    setProgress(0);
+
+    const handleEncryptAndUploadFile = async () => {
+      const numberChunks = Math.ceil(selectedFile.size / chunkSize);
+      const iv = generateIV();
+      const key = await generateKey();
+
+      const encryptAndUploadByChunk = (cryptoInfo, uploadInfo) => {
+        const { iv, key } = cryptoInfo;
+        const { file, fileName, from, to, seq, total } = uploadInfo;
+        const fileReader = new FileReader();
+        const chunk = file.slice(from, to);
+        fileReader.readAsArrayBuffer(chunk);
+        fileReader.onload = async (e) => {
+          if (e.target.error === null) {
+            try {
+              const encrypted = await encrypt(e.target.result, key, iv);
+              const blob = new Blob([encrypted]);
+              // const blob = new Blob([e.target.result]);
+              const formData = new FormData();
+              formData.append("file", blob);
+              formData.append("fileName", `${fileName}_${seq}`);
+              formData.append("totalChunks", total);
+              console.log("redirecting to server for uploading file");
+              const res = await fetch("/api/upload", {
+                method: "POST",
+                body: formData,
+              });
+              if (!res.ok) {
+                setIsUploading(false);
+                setError("Error uploading file");
+              } else {
+                const data = await res.json();
+                const { numUploadedChunks, fileNameInAzure } = data;
+                setProgress((numUploadedChunks / total) * 100);
+                if (fileNameInAzure && !displayFileName) {
+                  setDisplayFileName(fileNameInAzure);
+                  setPass(generatePass(iv, key));
+                }
+              }
+            } catch (err) {
+              console.error("encryptAndUploadByChunk ERROR: ", err);
+            }
+          }
+        };
+      };
+
+      for (let i = 0; i < numberChunks; i++) {
+        encryptAndUploadByChunk(
+          {
+            iv,
+            key,
+          },
+          {
+            file: selectedFile,
+            fileName: selectedFile.name,
+            from: i * chunkSize,
+            to: (i + 1) * chunkSize,
+            seq: i,
+            total: numberChunks,
+          }
+        );
+      }
     };
-
-    // const fileReader = new FileReader();
-    // fileReader.readAsArrayBuffer(selectedFile);
-    // fileReader.onload = (e) => {
-    //   const arrayBuffer = e.target.result;
-    //   encrypt(arrayBuffer).then(async ({ encrypted, pass }) => {
-    //     const formData = new FormData();
-    //     const blob = new File([encrypted], selectedFile.name);
-    //     formData.append("file", blob);
-    //     formData.append("fileName", selectedFile.name);
-    //     // socket.emit("hello", {socketId: socket.id});
-    //     socket.emit("room", {socketId: socket.id});
-    //     console.log("redirecting to server for uploading file");
-    //     fetch("/api/upload", {
-    //       method: "POST",
-    //       body: formData,
-    //     });
-
-    //     // const name = await uploadFile(formData);
-    //     // setFileName(name);
-    //     setPass(pass);
-    //   });
-    // };
-  };
-
-  const handleEnterFileName = (event) => {
-    setFileNameToDownload(event.target.value.trim());
-  };
-
-  const handleEnterPass = (event) => {
-    setPass(event.target.value.trim());
-  };
-
-  const handleDownload = () => {
-    console.log("redirecting to server for downloading file");
-    const download = async () => {
-      // const data = await downloadFile(fileNameToDownload);
-      setIsDownloading(true);
-      setProgress(0);
-      const response = await fetch("/api/download", {
-        method: "POST",
-        body: JSON.stringify({ fileName: fileNameToDownload }),
-      });
-      const rawData = await response.arrayBuffer();
-      decrypt(rawData, pass).then((decrypted) => {
-        const blob = new Blob([decrypted], {
-          type: "application/octet-stream",
-        });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = fileNameToDownload;
-        a.click();
-      });
-      // if (data) {
-      //   decrypt(data, pass).then((decrypted) => {
-      //     const blob = new Blob([decrypted], {
-      //       type: "application/octet-stream",
-      //     });
-      //     const url = URL.createObjectURL(blob);
-      //     const a = document.createElement("a");
-      //     a.href = url;
-      //     a.download = fileNameToDownload;
-      //     a.click();
-      //     // console.log("decrypted ne", decrypted);
-      //     // console.log(new TextDecoder().decode(decrypted));
-      //   });
-      // }
-    };
-    download();
+    handleEncryptAndUploadFile();
+    setIsUploading(false);
   };
 
   if (isUploading) {
     window.onbeforeunload = (e) => {
-      if (isUploading && !fileName) {
-        const dialogText = "Are you sure you want to leave?";
-        e.preventDefault();
-        e.returnValue = dialogText;
-        return dialogText;
-      }
+      const dialogText = "Are you sure you want to leave?";
+      e.preventDefault();
+      e.returnValue = dialogText;
+      return dialogText;
     };
   }
-
-  if (isUploading && Math.abs(progress - 100) < 0.001 && timerRef.current) {
-    console.log("clearing interval");
-    clearInterval(timerRef.current);
-    setIsUploading(false);
-    timerRef.current = null;
-  }
-
-  useEffect(() => {
-    if (isUploading && fileName) {
-      const callGetProgress = async () => {
-        const data = await getProgress(fileName, "upload");
-        if (data?.loadedBytes) {
-          const currentProgress = (data.loadedBytes / selectedFile.size) * 100;
-          if (currentProgress > 100) {
-            setProgress(100);
-          } else {
-            setProgress(currentProgress);
-          }
-        }
-      };
-      const timer = setInterval(() => {
-        callGetProgress();
-      }, 2000);
-
-      timerRef.current = timer;
-      return () => {
-        clearInterval(timer);
-      };
-    }
-  }, [isUploading, fileName]);
-
-  if(isDownloading && Math.abs(progress - 100) < 0.001 && timerRef.current) {
-    console.log("clearing interval");
-    clearInterval(timerRef.current);
-    setIsDownloading(false);
-    timerRef.current = null;
-  }
-
-  useEffect(() => {
-    if (isDownloading && fileNameToDownload) {
-      const callGetProgress = async () => {
-        const data = await getProgress(fileNameToDownload, "download");
-        // console.log("calling get progress for downloading", fileNameToDownload);
-
-        if (data?.loadedBytes) {
-          const currentProgress = (data.loadedBytes / selectedFile.size) * 100;
-          if (currentProgress > 100) {
-            setProgress(100);
-          } else {
-            setProgress(currentProgress);
-          }
-        }
-      };
-      const timer = setInterval(() => {
-        callGetProgress();
-      }, 2000);
-
-      timerRef.current = timer;
-      return () => {
-        clearInterval(timer);
-      };
-    }
-  }, [isDownloading, fileNameToDownload]);
-
-  // useEffect(() => {
-  //   console.log("socket id", socket);
-  //   socket.on("progress", (data) => {
-  //     console.log("socket client side", data);
-  //     // socket.emit("uploadFileServer", {message: "received"});
-  //   });
-  // }, [socket])
 
   return (
     <main className={styles.main}>
@@ -204,52 +115,32 @@ export default function Home() {
             type="file"
             id="file"
             name="file"
-            accept="image/png, image/jpeg, .txt, .pdf"
+            accept="image/png, image/jpeg, .txt, .pdf, mp4"
             onChange={onFileChange}
           />
           <button onClick={handleOnClick} style={{ border: "2px solid red" }}>
             Upload
           </button>
         </div>
-        {fileName && (
+        {displayFileName && (
           <div>
-            <p>File Name: {fileName}</p>
+            <p>File Name: {displayFileName}</p>
             <p>Pass: {pass}</p>
           </div>
         )}
+        {error && <p>{error}</p>}
       </section>
       <div className="w-full bg-neutral-200 dark:bg-neutral-600">
         <div
           className="bg-cyan-500 p-0.5 text-center text-xs font-medium leading-none text-slate-50"
           style={{
             width: `${progress.toFixed(0)}%`,
-            transition: "width 3s ease",
+            transition: "width 2s ease",
           }}
         >
           {progress.toFixed(2)}%
         </div>
       </div>
-      <section className={styles.description}>
-        <label htmlFor="text">Enter a file name</label>
-        <input
-          type="text"
-          id="name"
-          name="name"
-          onChange={handleEnterFileName}
-          style={{ border: "2px solid red" }}
-        />
-        <label htmlFor="text">Enter pass</label>
-        <input
-          type="text"
-          id="pass"
-          name="pass"
-          onChange={handleEnterPass}
-          style={{ border: "2px solid red" }}
-        />
-        <button onClick={handleDownload} style={{ border: "2px solid red" }}>
-          Download
-        </button>
-      </section>
     </main>
   );
 }
