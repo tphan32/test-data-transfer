@@ -1,7 +1,7 @@
 "use client";
 
 import styles from "./page.module.css";
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import {
   generateIV,
   generateKey,
@@ -9,27 +9,31 @@ import {
   encrypt,
   decrypt,
 } from "./utils/cryptoInBrowser";
+import Uppy from "@uppy/core";
+import { Dashboard } from "@uppy/react";
+import "@uppy/core/dist/style.min.css";
+import "@uppy/dashboard/dist/style.min.css";
 
 const chunkSize = 4 * 1024 * 1024; // 4 MB
 
 export default function Home() {
-  const [selectedFile, setSelectedFile] = useState(null);
   const [pass, setPass] = useState(null);
   const [displayFileName, setDisplayFileName] = useState("");
   const [isUploading, setIsUploading] = useState(false);
-  const [progress, setProgress] = useState(0);
   const [error, setError] = useState(null);
+  const uppy = useMemo(() => {
+    return new Uppy({
+      restrictions: { maxNumberOfFiles: 1 },
+      autoProceed: false,
+    });
+  }, []);
 
-  const onFileChange = (event) => {
-    setSelectedFile(event.target.files[0]);
-  };
+  const handleOnClick = (uppyState) => {
+    const selectedFile = uppyState.data;
 
-  const handleOnClick = () => {
-    if (!selectedFile) {
-      return;
-    }
+    setPass(null);
+    setDisplayFileName("");
     setIsUploading(true);
-    setProgress(0);
 
     const handleEncryptAndUploadFile = async () => {
       const numberChunks = Math.ceil(selectedFile.size / chunkSize);
@@ -50,7 +54,7 @@ export default function Home() {
               const blob = new Blob([e.target.result]);
               const formData = new FormData();
               formData.append("file", blob);
-              formData.append("fileName", `${fileName}_${seq}`);
+              formData.append("fileName", `${seq}#_#${fileName}`);
               formData.append("totalChunks", total);
               console.log("redirecting to server for uploading file");
               const res = await fetch("/api/upload", {
@@ -63,7 +67,48 @@ export default function Home() {
               } else {
                 const data = await res.json();
                 const { numUploadedChunks, fileNameInAzure } = data;
-                setProgress((numUploadedChunks / total) * 100);
+                const currentProgress = (numUploadedChunks / total) * 100;
+                const updatedFiles = Object.assign({}, uppy.getState().files);
+                const updatedFile = Object.assign(
+                  {},
+                  updatedFiles[uppyState.id],
+                  {
+                    progress: Object.assign(
+                      {},
+                      updatedFiles[uppyState.id].progress,
+                      {
+                        uploadComplete: currentProgress === 100,
+                        uploadStarted: true,
+                        percentage: currentProgress,
+                        bytesUploaded:
+                          (numUploadedChunks * chunkSize) % selectedFile.size,
+                      }
+                    ),
+                  }
+                );
+                updatedFiles[uppyState.id] = updatedFile;
+                uppy.setState({ files: updatedFiles });
+                if (
+                  document.getElementsByClassName(
+                    "uppy-StatusBar-statusPrimary"
+                  ).length > 0
+                ) {
+                  document.getElementsByClassName(
+                    "uppy-StatusBar-statusPrimary"
+                  )[0].innerHTML = `Uploading ${currentProgress.toFixed(2)}%`;
+                }
+                if (
+                  document.getElementsByClassName("uppy-StatusBar-progress")
+                    .length > 0
+                ) {
+                  document.getElementsByClassName(
+                    "uppy-StatusBar-progress"
+                  )[0].style.width = `${currentProgress}%`;
+                }
+                if (currentProgress === 100) {
+                  document.getElementsByClassName("uppy-DashboardContent-back")[0].innerHTML = "Done";
+                }
+
                 if (fileNameInAzure && !displayFileName) {
                   setDisplayFileName(fileNameInAzure);
                   setPass(generatePass(iv, key));
@@ -92,9 +137,9 @@ export default function Home() {
           }
         );
       }
+      setIsUploading(false);
     };
     handleEncryptAndUploadFile();
-    setIsUploading(false);
   };
 
   if (isUploading) {
@@ -106,41 +151,52 @@ export default function Home() {
     };
   }
 
+  useEffect(() => {
+    uppy.on("file-added", (file) => {
+      uppy.reset();
+      uppy.addFile(file);
+    });
+
+    uppy.on("upload", (filesState) => {
+      if (filesState.fileIDs.length === 0) {
+        setError("Please select a file");
+        return;
+      }
+      const uppyFile = uppy.getFile(filesState.fileIDs[0]);
+      handleOnClick(uppyFile);
+    });
+
+    uppy.off("complete", null).on("complete", (result) => {});
+
+    return () => {
+      uppy.close();
+      uppy.reset();
+      window.onbeforeunload = null;
+    };
+  }, []);
+
   return (
     <main className={styles.main}>
       <section className={styles.description}>
         <div>
-          <label htmlFor="image">Choose a file</label>
-          <input
-            type="file"
-            id="file"
-            name="file"
-            accept="image/png, image/jpeg, .txt, .pdf, mp4"
-            onChange={onFileChange}
+          <Dashboard
+            id="uppy"
+            uppy={uppy}
+            name="Upload File To Azure"
+            placeholder="Upload File To Azure"
+            proudlyDisplayPoweredByUppy={false}
+            allowMultipleUploads={false}
+            showProgressDetails={true}
           />
-          <button onClick={handleOnClick} style={{ border: "2px solid red" }}>
-            Upload
-          </button>
         </div>
-        {displayFileName && (
-          <div>
-            <p>File Name: {displayFileName}</p>
-            <p>Pass: {pass}</p>
-          </div>
-        )}
-        {error && <p>{error}</p>}
       </section>
-      <div className="w-full bg-neutral-200 dark:bg-neutral-600">
-        <div
-          className="bg-cyan-500 p-0.5 text-center text-xs font-medium leading-none text-slate-50"
-          style={{
-            width: `${progress.toFixed(0)}%`,
-            transition: "width 2s ease",
-          }}
-        >
-          {progress.toFixed(2)}%
-        </div>
-      </div>
+      {displayFileName && (
+        <section>
+          <p>File Name: {displayFileName}</p>
+          <p>Pass: {pass}</p>
+        </section>
+      )}
+      {error && <p>{error}</p>}
     </main>
   );
 }

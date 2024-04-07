@@ -8,7 +8,7 @@ export async function POST(request) {
   const file = new Uint8Array(await formData.get("file").arrayBuffer());
   const fileName = formData.get("fileName");
   const totalChunks = +formData.get("totalChunks");
-  const [blobName, seq] = fileName.split("_");
+  const [seq, blobName] = fileName.split("#_#");
   try {
     if (!azureUploadInfo.blockBlobClient) {
       azureUploadInfo.uniqueBlobName = generateUniqueFileName(blobName);
