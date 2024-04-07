@@ -14,7 +14,7 @@ import { Dashboard } from "@uppy/react";
 import "@uppy/core/dist/style.min.css";
 import "@uppy/dashboard/dist/style.min.css";
 
-const chunkSize = 4 * 1024 * 1024; // 4 MB
+const chunkSize = 16 * 1024 * 1024; // 32 MB
 
 export default function Home() {
   const [pass, setPass] = useState(null);
@@ -34,6 +34,7 @@ export default function Home() {
     setPass(null);
     setDisplayFileName("");
     setIsUploading(true);
+    const updatedFiles = Object.assign({}, uppy.getState().files);
 
     const handleEncryptAndUploadFile = async () => {
       const numberChunks = Math.ceil(selectedFile.size / chunkSize);
@@ -56,6 +57,25 @@ export default function Home() {
               formData.append("fileName", `${seq}#_#${fileName}`);
               formData.append("totalChunks", total);
               console.log("redirecting to server for uploading file");
+
+              let updatedFile;
+              if (seq === 0) {
+                updatedFile = Object.assign({}, updatedFiles[uppyState.id], {
+                  progress: Object.assign(
+                    {},
+                    updatedFiles[uppyState.id].progress,
+                    {
+                      uploadComplete: false,
+                      uploadStarted: true,
+                      percentage: 0,
+                      bytesUploaded: 0,
+                    }
+                  ),
+                });
+                updatedFiles[uppyState.id] = updatedFile;
+                uppy.setState({ files: updatedFiles });
+              }
+
               const res = await fetch("/api/upload", {
                 method: "POST",
                 body: formData,
@@ -67,24 +87,19 @@ export default function Home() {
                 const data = await res.json();
                 const { numUploadedChunks, fileNameInAzure } = data;
                 const currentProgress = (numUploadedChunks / total) * 100;
-                const updatedFiles = Object.assign({}, uppy.getState().files);
-                const updatedFile = Object.assign(
-                  {},
-                  updatedFiles[uppyState.id],
-                  {
-                    progress: Object.assign(
-                      {},
-                      updatedFiles[uppyState.id].progress,
-                      {
-                        uploadComplete: currentProgress === 100,
-                        uploadStarted: true,
-                        percentage: currentProgress,
-                        bytesUploaded:
-                          (numUploadedChunks * chunkSize) % selectedFile.size,
-                      }
-                    ),
-                  }
-                );
+                updatedFile = Object.assign({}, updatedFiles[uppyState.id], {
+                  progress: Object.assign(
+                    {},
+                    updatedFiles[uppyState.id].progress,
+                    {
+                      uploadComplete: currentProgress === 100,
+                      uploadStarted: true,
+                      percentage: currentProgress,
+                      bytesUploaded:
+                        (numUploadedChunks * chunkSize) % selectedFile.size,
+                    }
+                  ),
+                });
                 updatedFiles[uppyState.id] = updatedFile;
                 uppy.setState({ files: updatedFiles });
                 if (
@@ -105,7 +120,9 @@ export default function Home() {
                   )[0].style.width = `${currentProgress}%`;
                 }
                 if (currentProgress === 100) {
-                  document.getElementsByClassName("uppy-DashboardContent-back")[0].innerHTML = "Done";
+                  document.getElementsByClassName(
+                    "uppy-DashboardContent-back"
+                  )[0].innerHTML = "Done";
                 }
 
                 if (fileNameInAzure && !displayFileName) {
@@ -169,7 +186,6 @@ export default function Home() {
 
     return () => {
       uppy.close();
-      uppy.reset();
       window.onbeforeunload = null;
     };
   }, []);

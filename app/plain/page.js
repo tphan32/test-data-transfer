@@ -7,7 +7,7 @@ import { Dashboard } from "@uppy/react";
 import "@uppy/core/dist/style.min.css";
 import "@uppy/dashboard/dist/style.min.css";
 
-const chunkSize = 128 * 1024 * 1024; // 128 MB
+const chunkSize = 32 * 1024 * 1024; // 128 MB
 
 export default function Home() {
   const [displayFileName, setDisplayFileName] = useState("");
@@ -25,6 +25,7 @@ export default function Home() {
 
     setDisplayFileName("");
     setIsUploading(true);
+    const updatedFiles = Object.assign({}, uppy.getState().files);
 
     const handleUploadFile = async () => {
       const numberChunks = Math.ceil(selectedFile.size / chunkSize);
@@ -42,6 +43,25 @@ export default function Home() {
               formData.append("file", blob);
               formData.append("fileName", `${seq}#_#${fileName}`);
               formData.append("totalChunks", total);
+
+              let updatedFile;
+              if (seq === 0) {
+                updatedFile = Object.assign({}, updatedFiles[uppyState.id], {
+                  progress: Object.assign(
+                    {},
+                    updatedFiles[uppyState.id].progress,
+                    {
+                      uploadComplete: false,
+                      uploadStarted: true,
+                      percentage: 0,
+                      bytesUploaded: 0,
+                    }
+                  ),
+                });
+                updatedFiles[uppyState.id] = updatedFile;
+                uppy.setState({ files: updatedFiles });
+              }
+
               console.log("redirecting to server for uploading file");
               const res = await fetch("/api/upload", {
                 method: "POST",
@@ -54,24 +74,19 @@ export default function Home() {
                 const data = await res.json();
                 const { numUploadedChunks, fileNameInAzure } = data;
                 const currentProgress = (numUploadedChunks / total) * 100;
-                const updatedFiles = Object.assign({}, uppy.getState().files);
-                const updatedFile = Object.assign(
-                  {},
-                  updatedFiles[uppyState.id],
-                  {
-                    progress: Object.assign(
-                      {},
-                      updatedFiles[uppyState.id].progress,
-                      {
-                        uploadComplete: currentProgress === 100,
-                        uploadStarted: true,
-                        percentage: currentProgress,
-                        bytesUploaded:
-                          (numUploadedChunks * chunkSize) % selectedFile.size,
-                      }
-                    ),
-                  }
-                );
+                updatedFile = Object.assign({}, updatedFiles[uppyState.id], {
+                  progress: Object.assign(
+                    {},
+                    updatedFiles[uppyState.id].progress,
+                    {
+                      uploadComplete: currentProgress === 100,
+                      uploadStarted: true,
+                      percentage: currentProgress,
+                      bytesUploaded:
+                        (numUploadedChunks * chunkSize) % selectedFile.size,
+                    }
+                  ),
+                });
                 updatedFiles[uppyState.id] = updatedFile;
                 uppy.setState({ files: updatedFiles });
                 if (
@@ -109,16 +124,14 @@ export default function Home() {
       };
 
       for (let i = 0; i < numberChunks; i++) {
-        uploadFileByChunks(
-          {
-            file: selectedFile,
-            fileName: selectedFile.name,
-            from: i * chunkSize,
-            to: (i + 1) * chunkSize,
-            seq: i,
-            total: numberChunks,
-          }
-        );
+        uploadFileByChunks({
+          file: selectedFile,
+          fileName: selectedFile.name,
+          from: i * chunkSize,
+          to: (i + 1) * chunkSize,
+          seq: i,
+          total: numberChunks,
+        });
       }
       setIsUploading(false);
     };

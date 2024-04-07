@@ -29,16 +29,19 @@ export async function POST(request) {
     azureUploadInfo.blockIds[+seq] = blockId;
     azureUploadInfo.count += 1;
     if (azureUploadInfo.count === totalChunks) {
-      await azureUploadInfo.blockBlobClient.commitBlockList(
-        azureUploadInfo.blockIds
-      );
+      azureUploadInfo.blockBlobClient.commitBlockList(azureUploadInfo.blockIds);
       console.log(`UPLOAD FILE POST: committed blob ${blobName} successfully`);
       azureUploadInfo.blockBlobClient = null;
       azureUploadInfo.blockIds = null;
       azureUploadInfo.count = 0;
+      const fileNameInAzure = azureUploadInfo.uniqueBlobName;
       azureUploadInfo.uniqueBlobName = null;
       return NextResponse.json(
-        { message: "success", numUploadedChunks: totalChunks },
+        {
+          message: "success",
+          numUploadedChunks: totalChunks,
+          fileNameInAzure,
+        },
         { status: 200 }
       );
     }
