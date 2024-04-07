@@ -46,8 +46,8 @@ export default function Home() {
           if (e.target.error === null) {
             try {
               const encrypted = await encrypt(e.target.result, key, iv);
-              // const blob = new Blob([encrypted]);
-              const blob = new Blob([e.target.result]);
+              const blob = new Blob([encrypted]);
+              // const blob = new Blob([e.target.result]);
               const formData = new FormData();
               formData.append("file", blob);
               formData.append("fileName", `${fileName}_${seq}`);

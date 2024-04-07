@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { azureUploadInfo } from "@/public/storage";
+import { azureUploadInfo } from "@/app/data/storage";
 import { generateBlockID, generateUniqueFileName } from "../../utils/utils";
 
 export async function POST(request) {
@@ -28,7 +28,6 @@ export async function POST(request) {
     console.log(`UPLOAD FILE POST: uploaded chunk ${fileName} successfully`);
     azureUploadInfo.blockIds[+seq] = blockId;
     azureUploadInfo.count += 1;
-    console.log('azureUploadInfo', azureUploadInfo);
     if (azureUploadInfo.count === totalChunks) {
       await azureUploadInfo.blockBlobClient.commitBlockList(
         azureUploadInfo.blockIds
