@@ -1,23 +1,15 @@
 "use client";
 
-import styles from "./page.module.css";
+import styles from "../page.module.css";
 import React, { useEffect, useState, useMemo } from "react";
-import {
-  generateIV,
-  generateKey,
-  generatePass,
-  encrypt,
-  decrypt,
-} from "./utils/cryptoInBrowser";
 import Uppy from "@uppy/core";
 import { Dashboard } from "@uppy/react";
 import "@uppy/core/dist/style.min.css";
 import "@uppy/dashboard/dist/style.min.css";
 
-const chunkSize = 4 * 1024 * 1024; // 4 MB
+const chunkSize = 128 * 1024 * 1024; // 128 MB
 
 export default function Home() {
-  const [pass, setPass] = useState(null);
   const [displayFileName, setDisplayFileName] = useState("");
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState(null);
@@ -31,17 +23,13 @@ export default function Home() {
   const handleOnClick = (uppyState) => {
     const selectedFile = uppyState.data;
 
-    setPass(null);
     setDisplayFileName("");
     setIsUploading(true);
 
-    const handleEncryptAndUploadFile = async () => {
+    const handleUploadFile = async () => {
       const numberChunks = Math.ceil(selectedFile.size / chunkSize);
-      const iv = generateIV();
-      const key = await generateKey();
 
-      const encryptAndUploadByChunk = (cryptoInfo, uploadInfo) => {
-        const { iv, key } = cryptoInfo;
+      const uploadFileByChunks = (uploadInfo) => {
         const { file, fileName, from, to, seq, total } = uploadInfo;
         const fileReader = new FileReader();
         const chunk = file.slice(from, to);
@@ -49,8 +37,7 @@ export default function Home() {
         fileReader.onload = async (e) => {
           if (e.target.error === null) {
             try {
-              const encrypted = await encrypt(e.target.result, key, iv);
-              const blob = new Blob([encrypted]);
+              const blob = new Blob([e.target.result]);
               const formData = new FormData();
               formData.append("file", blob);
               formData.append("fileName", `${seq}#_#${fileName}`);
@@ -105,27 +92,24 @@ export default function Home() {
                   )[0].style.width = `${currentProgress}%`;
                 }
                 if (currentProgress === 100) {
-                  document.getElementsByClassName("uppy-DashboardContent-back")[0].innerHTML = "Done";
+                  document.getElementsByClassName(
+                    "uppy-DashboardContent-back"
+                  )[0].innerHTML = "Done";
                 }
 
                 if (fileNameInAzure && !displayFileName) {
                   setDisplayFileName(fileNameInAzure);
-                  setPass(generatePass(iv, key));
                 }
               }
             } catch (err) {
-              console.error("encryptAndUploadByChunk ERROR: ", err);
+              console.error("uploadFileByChunks ERROR: ", err);
             }
           }
         };
       };
 
       for (let i = 0; i < numberChunks; i++) {
-        encryptAndUploadByChunk(
-          {
-            iv,
-            key,
-          },
+        uploadFileByChunks(
           {
             file: selectedFile,
             fileName: selectedFile.name,
@@ -138,7 +122,7 @@ export default function Home() {
       }
       setIsUploading(false);
     };
-    handleEncryptAndUploadFile();
+    handleUploadFile();
   };
 
   if (isUploading) {
@@ -176,7 +160,7 @@ export default function Home() {
 
   return (
     <main className={styles.main}>
-      <h1>End-to-end Encryption Azure Data Transfer</h1>
+      <h1>Insecure Azure Data Transfer</h1>
       <section className={styles.description}>
         <div>
           <Dashboard
@@ -193,7 +177,6 @@ export default function Home() {
       {displayFileName && (
         <section>
           <p>File Name: {displayFileName}</p>
-          <p>Pass: {pass}</p>
         </section>
       )}
       {error && <p>{error}</p>}
