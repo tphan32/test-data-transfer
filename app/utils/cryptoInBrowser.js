@@ -55,28 +55,32 @@ export async function encrypt(data, key, iv) {
 }
 
 export async function decrypt(encryptedData, pass) {
-  const dataInUint8Array = convertToUint8Array(encryptedData);
+  try {
+    const dataInUint8Array = convertToUint8Array(encryptedData);
 
-  const [ivHex, keyHex] = pass.split(".");
-  const iv = hexToRawData(ivHex);
-  const rawKey = hexToRawData(keyHex);
+    const [ivHex, keyHex] = pass.split(".");
+    const iv = hexToRawData(ivHex);
+    const rawKey = hexToRawData(keyHex);
 
-  const cryptoKey = await crypto.subtle.importKey(
-    "raw",
-    rawKey,
-    { name: ALGORITHM, length: 128 },
-    false,
-    ["decrypt"]
-  );
+    const cryptoKey = await crypto.subtle.importKey(
+      "raw",
+      rawKey,
+      { name: ALGORITHM, length: 128 },
+      false,
+      ["decrypt"]
+    );
 
-  const decrypted = await crypto.subtle.decrypt(
-    {
-      name: ALGORITHM,
-      iv,
-    },
-    cryptoKey,
-    dataInUint8Array
-  );
-
-  return new Uint8Array(decrypted);
+    const decrypted = await crypto.subtle.decrypt(
+      {
+        name: ALGORITHM,
+        iv,
+      },
+      cryptoKey,
+      dataInUint8Array
+    );
+    return new Uint8Array(decrypted);
+  } catch (e) {
+    const error = new Error(e);
+    console.log("Error decrypting data: ", error.stack, error.message);
+  }
 }

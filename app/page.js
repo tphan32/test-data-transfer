@@ -13,8 +13,9 @@ import Uppy from "@uppy/core";
 import { Dashboard } from "@uppy/react";
 import "@uppy/core/dist/style.min.css";
 import "@uppy/dashboard/dist/style.min.css";
+import streamSaver from "streamsaver";
 
-const chunkSize = 16 * 1024 * 1024; // 32 MB
+const chunkSize = 3 * 1024 * 1024; // 4 MB
 
 export default function Home() {
   const [pass, setPass] = useState(null);
@@ -52,6 +53,7 @@ export default function Home() {
             try {
               const encrypted = await encrypt(e.target.result, key, iv);
               const blob = new Blob([encrypted]);
+              console.log("encrypted", encrypted, encrypted.byteLength);
               const formData = new FormData();
               formData.append("file", blob);
               formData.append("fileName", `${seq}#_#${fileName}`);
@@ -190,6 +192,76 @@ export default function Home() {
     };
   }, []);
 
+  const handleDownload = () => {
+    const fileStream = streamSaver.createWriteStream("filename");
+
+    let buffer = [];
+    let len = 0;
+    const chunkSizeAndEncryptTag = chunkSize + 16;
+
+    fetch(url).then((res) => {
+      const writer = fileStream.getWriter();
+      const reader = res.body.getReader();
+
+      const pump = async () => {
+        const { value, done } = await reader.read();
+        if (done) {
+          console.log("done");
+          let flatBuffer;
+          if (len > 0) {
+            // console.log("buffer in done", buffer, len);
+            flatBuffer = new Uint8Array(len);
+            let offset = 0;
+            for (const chunk of buffer) {
+              flatBuffer.set(chunk, offset);
+              offset += chunk.length;
+            }
+            const decrypted = await decrypt(new Uint8Array(flatBuffer), pass);
+            writer.write(decrypted);
+            // console.log("flatBuffer in done", flatBuffer, len);
+            // writer.write(new Uint8Array(flatBuffer));
+          }
+          writer.close();
+          return;
+        }
+        buffer.push(value);
+        len += value.length;
+        let flatBuffer;
+        // console.log("flatBuffer", flatBuffer, len, chunkSize);
+        if (len >= chunkSizeAndEncryptTag) {
+          flatBuffer = new Uint8Array(len);
+          let offset = 0;
+          for (const chunk of buffer) {
+            flatBuffer.set(chunk, offset);
+            offset += chunk.length;
+          }
+          buffer = [];
+        }
+        while (len >= chunkSizeAndEncryptTag) {
+          const chunk = new Uint8Array(
+            flatBuffer.slice(0, chunkSizeAndEncryptTag)
+          );
+          flatBuffer = flatBuffer.slice(chunkSizeAndEncryptTag);
+          len -= chunkSizeAndEncryptTag;
+          // console.log("chunk", chunk.byteLength, chunk);
+          // console.log("flatBuffer", flatBuffer.byteLength, len);
+
+          const decrypted = await decrypt(chunk, pass);
+          writer.write(decrypted);
+
+          // writer.write(chunk);
+          if (len < chunkSizeAndEncryptTag && len > 0) {
+            buffer = [flatBuffer];
+            // console.log("buffer in while loop", buffer, flatBuffer);
+          }
+        }
+        // console.log("flatBuffer", flatBuffer.byteLength, len);
+        writer.ready.then(pump);
+      };
+      pump();
+    });
+  };
+
   return (
     <main className={styles.main}>
       <h1>End-to-end Encryption Azure Data Transfer</h1>
@@ -213,6 +285,14 @@ export default function Home() {
         </section>
       )}
       {error && <p>{error}</p>}
+      <section className={styles.description}>
+        <button
+          className="rounded-full bg-slate-600 w-24 h-8 text-slate-100"
+          onClick={handleDownload}
+        >
+          Download
+        </button>
+      </section>
     </main>
   );
 }
