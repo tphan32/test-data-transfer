@@ -201,7 +201,6 @@ export default function Home() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "RequestMode": "no-cors",
         },
         body: JSON.stringify({ filename: filenameToDownload }),
       });
@@ -216,7 +215,12 @@ export default function Home() {
       let buffer = [];
       let len = 0;
 
-      const res = await fetch(url);
+      const res = await fetch(url, {
+        method: "GET",
+        headers: {
+          "RequestMode": "no-cors",
+        }
+      });
       const writer = fileStream.getWriter();
       const reader = res.body.getReader();
       const pump = async () => {
