@@ -82,5 +82,6 @@ export async function decrypt(encryptedData, pass) {
   } catch (e) {
     const error = new Error(e);
     console.log("Error decrypting data: ", error.stack, error.message);
+    throw error;
   }
 }

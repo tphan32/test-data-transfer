@@ -13,15 +13,18 @@ import Uppy from "@uppy/core";
 import { Dashboard } from "@uppy/react";
 import "@uppy/core/dist/style.min.css";
 import "@uppy/dashboard/dist/style.min.css";
-import streamSaver from "streamsaver";
 
-const chunkSize = 3 * 1024 * 1024; // 4 MB
+const chunkSize = 1 * 1024 * 1024; // 1 MB
+const encryptTagSize = 16;
+const chunkSizeAndEncryptTag = chunkSize + encryptTagSize;
 
 export default function Home() {
   const [pass, setPass] = useState(null);
   const [displayFileName, setDisplayFileName] = useState("");
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState(null);
+  const [filenameToDownload, setFilenameToDownload] = useState("");
+
   const uppy = useMemo(() => {
     return new Uppy({
       restrictions: { maxNumberOfFiles: 1 },
@@ -53,7 +56,6 @@ export default function Home() {
             try {
               const encrypted = await encrypt(e.target.result, key, iv);
               const blob = new Blob([encrypted]);
-              console.log("encrypted", encrypted, encrypted.byteLength);
               const formData = new FormData();
               formData.append("file", blob);
               formData.append("fileName", `${seq}#_#${fileName}`);
@@ -193,23 +195,35 @@ export default function Home() {
   }, []);
 
   const handleDownload = () => {
-    const fileStream = streamSaver.createWriteStream("filename");
+    const getDownloadUrl = async () => {
+      console.log("redirecting to server to get download url");
+      const res = await fetch("/api/download", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ filename: filenameToDownload }),
+      });
+      const data = await res.json();
+      console.log(data);
+      return data.url;
+    };
 
-    let buffer = [];
-    let len = 0;
-    const chunkSizeAndEncryptTag = chunkSize + 16;
+    const downloadFile = async () => {
+      const url = await getDownloadUrl();
+      const fileStream = streamSaver.createWriteStream("filename");
+      let buffer = [];
+      let len = 0;
 
-    fetch(url).then((res) => {
+      const res = await fetch(url);
       const writer = fileStream.getWriter();
       const reader = res.body.getReader();
-
       const pump = async () => {
         const { value, done } = await reader.read();
         if (done) {
           console.log("done");
           let flatBuffer;
           if (len > 0) {
-            // console.log("buffer in done", buffer, len);
             flatBuffer = new Uint8Array(len);
             let offset = 0;
             for (const chunk of buffer) {
@@ -218,8 +232,6 @@ export default function Home() {
             }
             const decrypted = await decrypt(new Uint8Array(flatBuffer), pass);
             writer.write(decrypted);
-            // console.log("flatBuffer in done", flatBuffer, len);
-            // writer.write(new Uint8Array(flatBuffer));
           }
           writer.close();
           return;
@@ -227,7 +239,6 @@ export default function Home() {
         buffer.push(value);
         len += value.length;
         let flatBuffer;
-        // console.log("flatBuffer", flatBuffer, len, chunkSize);
         if (len >= chunkSizeAndEncryptTag) {
           flatBuffer = new Uint8Array(len);
           let offset = 0;
@@ -243,23 +254,19 @@ export default function Home() {
           );
           flatBuffer = flatBuffer.slice(chunkSizeAndEncryptTag);
           len -= chunkSizeAndEncryptTag;
-          // console.log("chunk", chunk.byteLength, chunk);
-          // console.log("flatBuffer", flatBuffer.byteLength, len);
-
           const decrypted = await decrypt(chunk, pass);
           writer.write(decrypted);
-
-          // writer.write(chunk);
           if (len < chunkSizeAndEncryptTag && len > 0) {
             buffer = [flatBuffer];
-            // console.log("buffer in while loop", buffer, flatBuffer);
           }
         }
-        // console.log("flatBuffer", flatBuffer.byteLength, len);
+
         writer.ready.then(pump);
       };
       pump();
-    });
+    };
+
+    downloadFile();
   };
 
   return (
@@ -285,9 +292,32 @@ export default function Home() {
         </section>
       )}
       {error && <p>{error}</p>}
-      <section className={styles.description}>
+      <section className="flex flex-col gap-y-3 mt-5">
+        <h2>Download File</h2>
+        <div>
+          <label>Filename</label>
+          <input
+            type="text"
+            id="filename"
+            name="filename"
+            required
+            className="p-1.5 rounded-lg border-none w-full bg-slate-600 text-slate-100"
+            onChange={(e) => setFilenameToDownload(e.target.value)}
+          />
+        </div>
+        <div>
+          <label>Pass</label>
+          <input
+            type="text"
+            id="pass"
+            name="pass"
+            required
+            className="p-1.5 rounded-lg border-none w-full bg-slate-600 text-slate-100"
+            onChange={(e) => setPass(e.target.value)}
+          />
+        </div>
         <button
-          className="rounded-full bg-slate-600 w-24 h-8 text-slate-100"
+          className="rounded-full bg-slate-600 w-28 h-10 text-slate-100"
           onClick={handleDownload}
         >
           Download

@@ -1,6 +1,7 @@
 import {
   createAzureBlobServiceClient,
   getAzureContainer,
+  createSASToken,
 } from "@tphan32/data-transfer";
 
 const blobServiceClient = createAzureBlobServiceClient(
@@ -11,6 +12,8 @@ const container = getAzureContainer(
   process.env.AZURE_STORAGE_CONTAINER_NAME
 );
 
+const SASToken = createSASToken(blobServiceClient);
+
 const azureUploadInfo = {
   container,
   blockBlobClient: null,
@@ -19,4 +22,4 @@ const azureUploadInfo = {
   uniqueBlobName: null,
 };
 
-export { azureUploadInfo };
+export { azureUploadInfo, SASToken };

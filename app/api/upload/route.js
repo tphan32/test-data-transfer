@@ -25,7 +25,7 @@ export async function POST(request) {
     if (!azureUploadInfo.blockIds) {
       azureUploadInfo.blockIds = new Array(totalChunks);
     }
-    console.log(`UPLOAD FILE POST: uploaded chunk ${fileName} successfully`);
+    // console.log(`UPLOAD FILE POST: uploaded chunk ${fileName} successfully`);
     azureUploadInfo.blockIds[+seq] = blockId;
     azureUploadInfo.count += 1;
     if (azureUploadInfo.count === totalChunks) {
