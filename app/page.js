@@ -215,12 +215,7 @@ export default function Home() {
       let buffer = [];
       let len = 0;
 
-      const res = await fetch(url, {
-        method: "GET",
-        headers: {
-          "RequestMode": "no-cors",
-        }
-      });
+      const res = await fetch(url);
       const writer = fileStream.getWriter();
       const reader = res.body.getReader();
       const pump = async () => {
