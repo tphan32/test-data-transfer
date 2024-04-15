@@ -201,6 +201,7 @@ export default function Home() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "RequestMode": "no-cors",
         },
         body: JSON.stringify({ filename: filenameToDownload }),
       });
