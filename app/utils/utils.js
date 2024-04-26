@@ -40,7 +40,7 @@ function generateBlockID(blockIDPrefix, blockIndex) {
 
 const generateUniqueFileName = (originalName) => {
   const identifier = Math.random().toString().replace(/0\./, "");
-  return `${originalName}-${identifier}`;
+  return `${originalName}#_#${identifier}`;
 };
 
 export { generateBlockID, generateUniqueFileName };

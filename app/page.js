@@ -211,7 +211,8 @@ export default function Home() {
 
     const downloadFile = async () => {
       const url = await getDownloadUrl();
-      const fileStream = streamSaver.createWriteStream("filename");
+      const fn = filenameToDownload.split("#_#")[0];
+      const fileStream = streamSaver.createWriteStream(fn);
       let buffer = [];
       let len = 0;
 
