@@ -197,6 +197,7 @@ export default function Home() {
   const handleDownload = () => {
     const getDownloadUrl = async () => {
       console.log("redirecting to server to get download url");
+
       const res = await fetch("/api/download", {
         method: "POST",
         headers: {
@@ -205,63 +206,96 @@ export default function Home() {
         body: JSON.stringify({ filename: filenameToDownload }),
       });
       const data = await res.json();
-      console.log(data);
+      // console.log(data);
       return data.url;
     };
 
     const downloadFile = async () => {
       const url = await getDownloadUrl();
+      // const channel = new MessageChannel();
+      // channel.port1.onmessage = (e) => {
+      //   console.log("Message received from service worker: ", e.data);
+      // };
+      // const info = {
+      //   request: "init",
+      //   filename: filenameToDownload,
+      //   url,
+      //   pass,
+      // };
+      // navigator.serviceWorker.controller.postMessage(info, [channel.port2]);
       const fn = filenameToDownload.split("#_#")[0];
       const fileStream = streamSaver.createWriteStream(fn);
-      let buffer = [];
-      let len = 0;
+      // let buffer = [];
+      // let len = 0;
 
-      const res = await fetch(url);
+      const controller = new AbortController();
+      const signal = controller.signal;
+
+      const res = await fetch(url, { signal });
+      const opts = {
+        types: [
+          {
+            description: "Text file",
+            accept: { "text/plain": [".txt"] },
+          },
+        ],
+      };
+      // console.log(res);
+      // console.log(
+      //   "window.showSaveFilePicker",
+      //   await window.showSaveFilePicker(opts)
+      // );
       const writer = fileStream.getWriter();
       const reader = res.body.getReader();
+
+      // const { value, done } = await reader.read();
+      // await writer.write(value);
+      // writer.close();
+
       const pump = async () => {
         const { value, done } = await reader.read();
         if (done) {
           console.log("done");
-          let flatBuffer;
-          if (len > 0) {
-            flatBuffer = new Uint8Array(len);
-            let offset = 0;
-            for (const chunk of buffer) {
-              flatBuffer.set(chunk, offset);
-              offset += chunk.length;
-            }
-            const decrypted = await decrypt(new Uint8Array(flatBuffer), pass);
-            writer.write(decrypted);
-          }
+          // let flatBuffer;
+          // if (len > 0) {
+          //   flatBuffer = new Uint8Array(len);
+          //   let offset = 0;
+          //   for (const chunk of buffer) {
+          //     flatBuffer.set(chunk, offset);
+          //     offset += chunk.length;
+          //   }
+          //   const decrypted = await decrypt(new Uint8Array(flatBuffer), pass);
+          //   writer.write(decrypted);
+          // }
           writer.close();
           return;
         }
-        buffer.push(value);
-        len += value.length;
-        let flatBuffer;
-        if (len >= chunkSizeAndEncryptTag) {
-          flatBuffer = new Uint8Array(len);
-          let offset = 0;
-          for (const chunk of buffer) {
-            flatBuffer.set(chunk, offset);
-            offset += chunk.length;
-          }
-          buffer = [];
-        }
-        while (len >= chunkSizeAndEncryptTag) {
-          const chunk = new Uint8Array(
-            flatBuffer.slice(0, chunkSizeAndEncryptTag)
-          );
-          flatBuffer = flatBuffer.slice(chunkSizeAndEncryptTag);
-          len -= chunkSizeAndEncryptTag;
-          const decrypted = await decrypt(chunk, pass);
-          writer.write(decrypted);
-          if (len < chunkSizeAndEncryptTag && len > 0) {
-            buffer = [flatBuffer];
-          }
-        }
-
+        // buffer.push(value);
+        // len += value.length;
+        // let flatBuffer;
+        // if (len >= chunkSizeAndEncryptTag) {
+        //   flatBuffer = new Uint8Array(len);
+        //   let offset = 0;
+        //   for (const chunk of buffer) {
+        //     flatBuffer.set(chunk, offset);
+        //     offset += chunk.length;
+        //   }
+        //   buffer = [];
+        // }
+        // while (len >= chunkSizeAndEncryptTag) {
+        //   const chunk = new Uint8Array(
+        //     flatBuffer.slice(0, chunkSizeAndEncryptTag)
+        //   );
+        //   flatBuffer = flatBuffer.slice(chunkSizeAndEncryptTag);
+        //   len -= chunkSizeAndEncryptTag;
+        //   const decrypted = await decrypt(chunk, pass);
+        //   writer.write(decrypted);
+        //   console.log("writing to file");
+        //   if (len < chunkSizeAndEncryptTag && len > 0) {
+        //     buffer = [flatBuffer];
+        //   }
+        // }
+        writer.write(value);
         writer.ready.then(pump);
       };
       pump();
@@ -327,4 +361,7 @@ export default function Home() {
     </main>
   );
 }
+
+// events_2024-04-12_20.log#_#19262572921246623
+// bf4e906bd412ec2dec895f0d4331fba2.3acba6adaf9babeb1c21536f9487e473
 
